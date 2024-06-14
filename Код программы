@@ -1,0 +1,187 @@
+import sys
+import csv
+from PyQt5.QtWidgets import *
+from PyQt5.QtCore import Qt
+from datetime import datetime
+import pandas as pd
+
+
+class LoginWindow(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Авторизация")
+        self.setGeometry(100, 100, 300, 200)
+
+        self.layout = QVBoxLayout()
+        self.setLayout(self.layout)
+
+        self.title_label = QLabel("Авторизация")
+        self.title_label.setAlignment(Qt.AlignCenter)
+        self.title_label.setStyleSheet("font-weight: bold; font-size: 16px;")
+        self.layout.addWidget(self.title_label)
+
+        self.username_input = QLineEdit()
+        self.password_input = QLineEdit()
+        self.password_input.setEchoMode(QLineEdit.Password)
+        self.login_button = QPushButton("Войти")
+        self.login_button.clicked.connect(self.login)
+
+        self.layout.addWidget(QLabel("Имя пользователя:"))
+        self.layout.addWidget(self.username_input)
+        self.layout.addWidget(QLabel("Пароль:"))
+        self.layout.addWidget(self.password_input)
+        self.layout.addWidget(self.login_button)
+
+    def read_users(self):
+        users = {}
+        with open('inputDataUsers.csv', mode='r', encoding='utf-8') as file:
+            reader = csv.DictReader(file, delimiter=';')
+            for row in reader:
+                users[row['login']] = {'password': row['password'], 'type': row['type']}
+        return users
+
+    def login(self):
+        username = self.username_input.text()
+        password = self.password_input.text()
+        users = self.read_users()
+
+        if username in users and users[username]['password'] == password:
+            user_type = users[username]['type']
+            self.main_window = MainWindow(user_type, username)
+            self.main_window.show()
+            self.close()
+        else:
+            QMessageBox.warning(self, "Ошибка авторизации", "Неверное имя пользователя или пароль. Пожалуйста, попробуйте снова.")
+
+class MainWindow(QMainWindow):
+    def __init__(self, user_type, username):
+        super().__init__()
+        self.setWindowTitle("Главное окно")
+        self.setGeometry(100, 100, 800, 600)
+
+        self.username = username  # Сохраняем username
+        self.main_widget = QStackedWidget()
+        self.setCentralWidget(self.main_widget)
+
+        self.manager_widget = self.create_manager_widget()
+        self.specialist_widget = self.create_specialist_widget()
+        self.operator_widget = self.create_operator_widget()
+        self.customer_widget = self.create_customer_widget()
+
+        if user_type == 'Менеджер':
+            self.main_widget.addWidget(self.manager_widget)
+        elif user_type == 'Специалист':
+            self.main_widget.addWidget(self.specialist_widget)
+        elif user_type == 'Оператор':
+            self.main_widget.addWidget(self.operator_widget)
+        elif user_type == 'Заказчик':
+            self.main_widget.addWidget(self.customer_widget)
+
+    def submit_request(self):
+        # Собираем данные из полей формы
+        equipment_type = self.equipment_type_input.text().strip()
+        device_model = self.device_model_input.text().strip()
+        problem_description = self.problem_description_input.text().strip()
+
+        # Проверка на пустые поля
+        if not equipment_type or not device_model or not problem_description:
+            QMessageBox.warning(self, "Ошибка отправки заявки", "Пожалуйста, заполните все поля.")
+            return
+
+        # Используем сохраненный username
+        username = self.username
+
+        # Загружаем датасет
+        df = pd.read_csv('inputDataUsers.csv', delimiter=';')
+
+        # Поиск userID по login (username)
+        user_id = int((df.loc[df['login'] == username, 'userID'].values)[0])
+        print(user_id)
+
+        # Записываем заявку в файл inputDataRequests.csv
+        dataRequests = pd.read_csv('inputDataRequests.csv')
+        num_rows = len(dataRequests)
+
+        with open("inputDataRequests.csv", mode='a', newline='', encoding='utf-8') as file:
+            writer = csv.writer(file, delimiter=';')
+            writer.writerow([num_rows+1, datetime.now().strftime('%Y-%m-%d'),
+                            equipment_type, device_model, problem_description,
+                            "Новая заявка", "", "", "", user_id])
+
+        # Очищаем поля формы после отправки заявки
+        self.equipment_type_input.clear()
+        self.device_model_input.clear()
+        self.problem_description_input.clear()
+
+        # Обновляем список сделанных заявок
+        self.update_requests_list()
+
+        # Выводим сообщение об успешной отправке заявки
+        QMessageBox.information(self, "Заявка отправлена", "Ваша заявка успешно отправлена.")
+
+    def update_requests_list(self):
+        # Очищаем список сделанных заявок
+        self.requests_list.clear()
+
+    def create_manager_widget(self):
+        widget = QWidget()
+        layout = QVBoxLayout()
+        widget.setLayout(layout)
+        layout.addWidget(QLabel("Интерфейс менеджера"))
+        return widget
+
+    def create_specialist_widget(self):
+        widget = QWidget()
+        layout = QVBoxLayout()
+        widget.setLayout(layout)
+        layout.addWidget(QLabel("Интерфейс специалиста"))
+        return widget
+
+    def create_operator_widget(self):
+        widget = QWidget()
+        layout = QVBoxLayout()
+        widget.setLayout(layout)
+        layout.addWidget(QLabel("Интерфейс оператора"))
+        return widget
+
+    def create_customer_widget(self):
+        widget = QWidget()
+        layout = QVBoxLayout()
+        widget.setLayout(layout)
+
+        # Форма "Заявка на ремонт"
+        title_label = QLabel("Заявка на ремонт")
+        title_label.setAlignment(Qt.AlignCenter)
+        title_label.setStyleSheet("font-weight: bold; font-size: 16px;")
+        layout.addWidget(title_label)
+
+        self.equipment_type_input = QLineEdit()
+        self.device_model_input = QLineEdit()
+        self.problem_description_input = QLineEdit()
+
+        submit_button = QPushButton("Отправить заявку")
+        submit_button.clicked.connect(self.submit_request)
+
+        layout.addWidget(QLabel("Тип оборудования:"))
+        layout.addWidget(self.equipment_type_input)
+        layout.addWidget(QLabel("Модель устройства:"))
+        layout.addWidget(self.device_model_input)
+        layout.addWidget(QLabel("Описание проблемы:"))
+        layout.addWidget(self.problem_description_input)
+        layout.addWidget(submit_button)
+
+        layout.addSpacing(20)
+
+        # Список сделанных заявок
+        self.requests_list = QListWidget()
+        layout.addWidget(QLabel("Сделанные заявки:"))
+        layout.addWidget(self.requests_list)
+
+        return widget
+
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    login_window = LoginWindow()
+    login_window.show()
+    sys.exit(app.exec_())
